@@ -71,34 +71,21 @@ void destroy_ijvm() {
 
 }
 
+void increment_program_counter() {
+    current_program.program_counter += 1;
+}
+
 void run() {
-    while (current_program.program_counter < current_program.text_size) {
+    while (!finished()) {
         step();
     }
-    // TODO:
-    // Step while you can
-}
-
-void set_input(FILE *fp) {
-    current_program.input = fp;
-}
-
-void set_output(FILE *fp) {
-    current_program.output = fp;
-}
-
-int get_program_counter() {
-    return current_program.program_counter;
-}
-
-byte_t *get_text() {
-    return current_program.text;
 }
 
 bool step(void) {
-    switch (current_program.text[current_program.program_counter]) {
+    switch (get_instruction()) {
         case OP_BIPUSH: {
-            int8_t arg = (int8_t) current_program.text[++current_program.program_counter];
+            increment_program_counter();
+            int8_t arg = (int8_t) get_text()[get_program_counter()];
             push_stack(current_program.stack, arg);
             log("BIPUSH %d\n", arg);
             break;
@@ -111,9 +98,6 @@ bool step(void) {
             break;
         case OP_GOTO:
             log("GOTO\n");
-            break;
-        case OP_HALT:
-            log("HALT\n");
             break;
         case OP_IADD: {
             word_t arg2 = pop_stack(current_program.stack);
@@ -130,7 +114,6 @@ bool step(void) {
             break;
         }
         case OP_IAND: {
-            log("IAND\n");
             word_t arg2 = pop_stack(current_program.stack);
             word_t arg1 = pop_stack(current_program.stack);
             push_stack(current_program.stack, arg1 & arg2);
@@ -138,7 +121,6 @@ bool step(void) {
             break;
         }
         case OP_IOR: {
-            log("IOR\n");
             word_t arg2 = pop_stack(current_program.stack);
             word_t arg1 = pop_stack(current_program.stack);
             push_stack(current_program.stack, arg1 | arg2);
@@ -162,7 +144,7 @@ bool step(void) {
             break;
         case OP_IN: {
             int input = getc(current_program.input);
-            if(input == EOF)
+            if (input == EOF)
                 input = '0';
             push_stack(current_program.stack, input);
             log("IN\n");
@@ -184,14 +166,14 @@ bool step(void) {
             log("NOP\n");
             break;
         case OP_OUT: {
-            log("OUT\n");
             word_t arg = pop_stack(current_program.stack);
             putc(arg, current_program.output);
+            log("OUT\n");
             break;
         }
         case OP_POP: {
-            log("POP\n");
             pop_stack(current_program.stack);
+            log("POP\n");
             break;
         }
         case OP_SWAP: {
@@ -205,9 +187,36 @@ bool step(void) {
         case OP_WIDE:
             log("WIDE\n");
             break;
+        case OP_HALT: {
+            current_program.halted = true;
+            log("HALT\n");
+            break;
+        }
+        default: {
+            current_program.halted = true;
+            log("Unknown Instruction\n");
+            break;
+        }
+
     }
-    current_program.program_counter += 1;
+    increment_program_counter();
     return true;
+}
+
+void set_input(FILE *fp) {
+    current_program.input = fp;
+}
+
+void set_output(FILE *fp) {
+    current_program.output = fp;
+}
+
+int get_program_counter(void) {
+    return current_program.program_counter;
+}
+
+byte_t *get_text(void) {
+    return current_program.text;
 }
 
 int text_size(void) {
@@ -215,8 +224,7 @@ int text_size(void) {
 }
 
 byte_t get_instruction(void) {
-    // TODO:
-    return 0;
+    return get_text()[get_program_counter()];
 }
 
 word_t tos(void) {
@@ -229,4 +237,9 @@ int stack_size(void) {
 
 word_t *get_stack(void) {
     return current_program.stack->entries;
+}
+
+bool finished(void) {
+    return current_program.halted
+           || get_program_counter() >= text_size();
 }

@@ -13,6 +13,7 @@ typedef struct program {
     ijvm_stack_t *stack;
     FILE *input;
     FILE *output;
+    bool halted;
 } program_t;
 
 byte_t *parse_block(FILE *fp, uint32_t *block_size);
