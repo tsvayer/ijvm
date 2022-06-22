@@ -1,5 +1,8 @@
 #include <stdlib.h>
-#include <machine.h>
+#include "machine.h"
+#include "util.h"
+
+#define STACK_SIZE 0x100
 
 static uint32_t swap_word(uint32_t num) {
     return ((num >> 24) & 0xff) | ((num << 8) & 0xff0000) | ((num >> 8) & 0xff00) | ((num << 24) & 0xff000000);
@@ -31,17 +34,21 @@ int init_ijvm(char *binary_file) {
     // Convert endianness
     header = swap_word(header);
     // Check that it is actually the ijvm file
-    if (header != MAGIC_NUMBER){
+    if (header != MAGIC_NUMBER) {
         // If it is not ijvm file close file and return error
         fclose(fp);
         return -1;
     }
     // Reset program counter
     current_program.program_counter = 0;
+    current_program.stack = init_stack(STACK_SIZE);
     // Parse Constant Pool block
     current_program.constant_pool = parse_block(fp, &current_program.constant_pool_size);
     // Parse Text block
     current_program.text = parse_block(fp, &current_program.text_size);
+
+    current_program.input = stdin;
+    current_program.output = stdout;
     // Close file and return success
     fclose(fp);
     return 0;
@@ -58,96 +65,26 @@ void destroy_ijvm() {
     free(current_program.text);
     // Reset Constant Pool Size
     current_program.constant_pool_size = 0;
+    // Destroy Stack
+    destroy_stack(current_program.stack);
+    current_program.stack = NULL;
+
 }
 
 void run() {
-    while(current_program.program_counter < current_program.text_size) {
-        switch(current_program.text[current_program.program_counter]) {
-            case OP_BIPUSH:
-                printf("BIPUSH\n");
-                break;
-            case OP_DUP:
-                printf("DUP\n");
-                break;
-            case OP_ERR:
-                printf("ERR\n");
-                break;
-            case OP_GOTO:
-                printf("GOTO\n");
-                break;
-            case OP_HALT:
-                printf("HALT\n");
-                break;
-            case OP_IADD:
-                printf("IADD\n");
-                break;
-            case OP_IAND:
-                printf("IAND\n");
-                break;
-            case OP_IFEQ:
-                printf("IFEQ\n");
-                break;
-            case OP_IFLT:
-                printf("IFLT\n");
-                break;
-            case OP_ICMPEQ:
-                printf("ICMPEQ\n");
-                break;
-            case OP_IINC:
-                printf("IINC\n");
-                break;
-            case OP_ILOAD:
-                printf("ILOAD\n");
-                break;
-            case OP_IN:
-                printf("IN\n");
-                break;
-            case OP_INVOKEVIRTUAL:
-                printf("INVOKEVIRTUAL\n");
-                break;
-            case OP_IOR:
-                printf("IOR\n");
-                break;
-            case OP_IRETURN:
-                printf("IRETURN\n");
-                break;
-            case OP_ISTORE:
-                printf("ISTORE\n");
-                break;
-            case OP_ISUB:
-                printf("ISUB\n");
-                break;
-            case OP_LDC_W:
-                printf("LDC_W\n");
-                break;
-            case OP_NOP:
-                printf("NOP\n");
-                break;
-            case OP_OUT:
-                printf("OUT\n");
-                break;
-            case OP_POP:
-                printf("POP\n");
-                break;
-            case OP_SWAP:
-                printf("SWAP\n");
-                break;
-            case OP_WIDE:
-                printf("WIDE\n");
-                break;
-        }
-        current_program.program_counter += 1;
+    while (current_program.program_counter < current_program.text_size) {
+        step();
     }
     // TODO:
     // Step while you can
 }
 
 void set_input(FILE *fp) {
-    // TODO: implement me
+    current_program.input = fp;
 }
 
 void set_output(FILE *fp) {
-    // TODO: implement me
+    current_program.output = fp;
 }
 
 int get_program_counter() {
@@ -159,7 +96,117 @@ byte_t *get_text() {
 }
 
 bool step(void) {
-    // TODO:
+    switch (current_program.text[current_program.program_counter]) {
+        case OP_BIPUSH: {
+            int8_t arg = (int8_t) current_program.text[++current_program.program_counter];
+            push_stack(current_program.stack, arg);
+            log("BIPUSH %d\n", arg);
+            break;
+        }
+        case OP_DUP:
+            log("DUP\n");
+            break;
+        case OP_ERR:
+            log("ERR\n");
+            break;
+        case OP_GOTO:
+            log("GOTO\n");
+            break;
+        case OP_HALT:
+            log("HALT\n");
+            break;
+        case OP_IADD: {
+            word_t arg2 = pop_stack(current_program.stack);
+            word_t arg1 = pop_stack(current_program.stack);
+            push_stack(current_program.stack, arg1 + arg2);
+            log("IADD\n");
+            break;
+        }
+        case OP_ISUB: {
+            word_t arg2 = pop_stack(current_program.stack);
+            word_t arg1 = pop_stack(current_program.stack);
+            push_stack(current_program.stack, arg1 - arg2);
+            log("ISUB\n");
+            break;
+        }
+        case OP_IAND: {
+            log("IAND\n");
+            word_t arg2 = pop_stack(current_program.stack);
+            word_t arg1 = pop_stack(current_program.stack);
+            push_stack(current_program.stack, arg1 & arg2);
+            log("IAND\n");
+            break;
+        }
+        case OP_IOR: {
+            log("IOR\n");
+            word_t arg2 = pop_stack(current_program.stack);
+            word_t arg1 = pop_stack(current_program.stack);
+            push_stack(current_program.stack, arg1 | arg2);
+            log("IOR\n");
+            break;
+        }
+        case OP_IFEQ:
+            log("IFEQ\n");
+            break;
+        case OP_IFLT:
+            log("IFLT\n");
+            break;
+        case OP_ICMPEQ:
+            log("ICMPEQ\n");
+            break;
+        case OP_IINC:
+            log("IINC\n");
+            break;
+        case OP_ILOAD:
+            log("ILOAD\n");
+            break;
+        case OP_IN: {
+            int input = getc(current_program.input);
+            if(input == EOF)
+                input = '0';
+            push_stack(current_program.stack, input);
+            log("IN\n");
+            break;
+        }
+        case OP_INVOKEVIRTUAL:
+            log("INVOKEVIRTUAL\n");
+            break;
+        case OP_IRETURN:
+            log("IRETURN\n");
+            break;
+        case OP_ISTORE:
+            log("ISTORE\n");
+            break;
+        case OP_LDC_W:
+            log("LDC_W\n");
+            break;
+        case OP_NOP:
+            log("NOP\n");
+            break;
+        case OP_OUT: {
+            log("OUT\n");
+            word_t arg = pop_stack(current_program.stack);
+            putc(arg, current_program.output);
+            break;
+        }
+        case OP_POP: {
+            log("POP\n");
+            pop_stack(current_program.stack);
+            break;
+        }
+        case OP_SWAP: {
+            word_t arg2 = pop_stack(current_program.stack);
+            word_t arg1 = pop_stack(current_program.stack);
+            push_stack(current_program.stack, arg2);
+            push_stack(current_program.stack, arg1);
+            log("SWAP\n");
+            break;
+        }
+        case OP_WIDE:
+            log("WIDE\n");
+            break;
+    }
+    current_program.program_counter += 1;
     return true;
 }
 
@@ -173,5 +220,13 @@ byte_t get_instruction(void) {
 }
 
 word_t tos(void) {
-    return 0;
+    return top_stack(current_program.stack);
+}
+
+int stack_size(void) {
+    return size_stack(current_program.stack);
+}
+
+word_t *get_stack(void) {
+    return current_program.stack->entries;
 }

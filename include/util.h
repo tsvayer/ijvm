@@ -4,10 +4,10 @@
 /* debug print */
 #ifdef DEBUG
 
-#define dprintf(...) \
+#define log(...) \
     fprintf(stderr,  __VA_ARGS__)
 #else
-#define dprintf(...)
+#define log(...)
 #endif
 
 #endif
