@@ -2,20 +2,20 @@
 #define MACHINE_H
 
 #include "ijvm.h"
-#include "stack.h"
 
-typedef struct program {
-    uint32_t program_counter;
-    uint32_t text_size;
+typedef struct machine {
     byte_t *text;
-    uint32_t constant_pool_size;
-    byte_t *constant_pool;
-    ijvm_stack_t *stack;
+    uint32_t text_size;
+    byte_t *cpp; // Constant Pool Pointer
+    uint32_t cp_size; // Constant Pool Size
+    uint32_t pc; // Program Counter
+    word_t *lv; // Local Variable Frame pointer
+    word_t *stack;
+    word_t *sp;
     FILE *input;
     FILE *output;
     bool halted;
-    word_t *locals;
-} program_t;
+} machine_t;
 
 byte_t *parse_block(FILE *fp, uint32_t *block_size);
 
