@@ -46,6 +46,8 @@ int init_ijvm(char *binary_file) {
     current_program.constant_pool = parse_block(fp, &current_program.constant_pool_size);
     // Parse Text block
     current_program.text = parse_block(fp, &current_program.text_size);
+    // Init Locals
+    current_program.locals = malloc(sizeof(word_t) * 10);
 
     current_program.input = stdin;
     current_program.output = stdout;
@@ -68,6 +70,8 @@ void destroy_ijvm() {
     // Destroy Stack
     destroy_stack(current_program.stack);
     current_program.stack = NULL;
+    // Destroy Locals
+    free(current_program.locals);
 
 }
 
@@ -79,10 +83,14 @@ int8_t get_byte_operand() {
     return (int8_t) get_text()[get_program_counter() + 1];
 }
 
+uint16_t get_ushort_operand() {
+    uint16_t operand1 = get_text()[get_program_counter() + 1];
+    uint16_t operand2 = get_text()[get_program_counter() + 2];
+    return operand1 * 0x100 + operand2;
+}
+
 int16_t get_short_operand() {
-    byte_t operand1 = get_text()[get_program_counter() + 1];
-    byte_t operand2 = get_text()[get_program_counter() + 2];
-    return (int16_t) (operand1 * 0x100 + operand2);
+    return (int16_t) get_ushort_operand();
 }
 
 void run() {
@@ -107,10 +115,6 @@ bool step(void) {
             log("DUP\n");
             break;
         }
-        case OP_ERR:
-            increment_program_counter(1);
-            log("ERR\n");
-            break;
         case OP_GOTO: {
             int16_t offset = get_short_operand();
             log("GOTO %d\n", offset);
@@ -180,14 +184,6 @@ bool step(void) {
             log("IOR\n");
             break;
         }
-        case OP_IINC:
-            increment_program_counter(1);
-            log("IINC\n");
-            break;
-        case OP_ILOAD:
-            increment_program_counter(1);
-            log("ILOAD\n");
-            break;
         case OP_IN: {
             int input = getc(current_program.input);
             if (input == EOF)
@@ -197,22 +193,39 @@ bool step(void) {
             log("IN\n");
             break;
         }
-        case OP_INVOKEVIRTUAL:
-            increment_program_counter(1);
-            log("INVOKEVIRTUAL\n");
+        case OP_LDC_W: {
+            uint16_t index = get_ushort_operand();
+            push_stack(current_program.stack, get_constant(index));
+            increment_program_counter(3);
+            log("LDC_W %d\n", index);
             break;
-        case OP_IRETURN:
-            increment_program_counter(1);
-            log("IRETURN\n");
+        }
+        case OP_ISTORE: {
+            word_t local = pop_stack(current_program.stack);
+            byte_t index = get_byte_operand();
+            current_program.locals[index] = local;
+            increment_program_counter(2);
+            log("ISTORE %d\n", index);
             break;
-        case OP_ISTORE:
-            increment_program_counter(1);
-            log("ISTORE\n");
+        }
+        case OP_ILOAD: {
+            int8_t index = get_byte_operand();
+            word_t local = get_local_variable(index);
+            push_stack(current_program.stack, local);
+            increment_program_counter(2);
+            log("ILOAD %d\n", index);
             break;
-        case OP_LDC_W:
-            increment_program_counter(1);
-            log("LDC_W\n");
+        }
+        case OP_IINC: {
+            uint16_t arg = get_ushort_operand();
+            byte_t index = arg / 0x100;
+            int8_t value = (int8_t) (arg % 0x100);
+            word_t local = get_local_variable(index) + value;
+            current_program.locals[index] = local;
+            increment_program_counter(3);
+            log("IINC %d %d\n", index, value);
             break;
+        }
         case OP_NOP:
             increment_program_counter(1);
             log("NOP\n");
@@ -243,6 +256,19 @@ bool step(void) {
             increment_program_counter(1);
             log("WIDE\n");
             break;
+        case OP_INVOKEVIRTUAL:
+            increment_program_counter(1);
+            log("INVOKEVIRTUAL\n");
+            break;
+        case OP_IRETURN:
+            increment_program_counter(1);
+            log("IRETURN\n");
+            break;
+        case OP_ERR: {
+            current_program.halted = true;
+            log("ERR\n");
+            break;
+        }
         case OP_HALT: {
             current_program.halted = true;
             log("HALT\n");
@@ -296,4 +322,16 @@ word_t *get_stack(void) {
 bool finished(void) {
     return current_program.halted
            || get_program_counter() >= text_size();
+}
+
+word_t get_constant(int i) {
+    int offset = i * sizeof(word_t);
+    return current_program.constant_pool[offset] * 0x1000000
+           + current_program.constant_pool[offset + 1] * 0x10000
+           + current_program.constant_pool[offset + 2] * 0x100
+           + current_program.constant_pool[offset + 3];
+}
+
+word_t get_local_variable(int i) {
+    return current_program.locals[i];
 }

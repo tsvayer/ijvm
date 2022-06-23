@@ -14,6 +14,7 @@ typedef struct program {
     FILE *input;
     FILE *output;
     bool halted;
+    word_t *locals;
 } program_t;
 
 byte_t *parse_block(FILE *fp, uint32_t *block_size);
