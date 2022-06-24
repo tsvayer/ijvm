@@ -15,6 +15,7 @@ typedef struct machine {
     FILE *input;
     FILE *output;
     bool halted;
+    bool wide_index;
 } machine_t;
 
 byte_t *parse_block(FILE *fp, uint32_t *block_size);

@@ -2,7 +2,7 @@
 #include "machine.h"
 #include "util.h"
 
-#define STACK_SIZE 0x1000
+#define STACK_SIZE 0x10000
 
 static uint32_t swap_word(uint32_t num) {
     return ((num >> 24) & 0xff) | ((num << 8) & 0xff0000) | ((num >> 8) & 0xff00) | ((num << 24) & 0xff000000);
@@ -40,6 +40,7 @@ int init_ijvm(char *binary_file) {
         return -1;
     }
     machine.halted = false;
+    machine.wide_index = false;
     // Reset program counter
     machine.pc = 0;
     // Init stack
@@ -89,14 +90,10 @@ int8_t get_byte_operand(uint16_t index) {
     return (int8_t) get_text()[get_program_counter() + index];
 }
 
-uint16_t get_ushort_operand(uint16_t index) {
+uint16_t get_short_operand(uint16_t index) {
     uint16_t operand1 = get_text()[get_program_counter() + index];
     uint16_t operand2 = get_text()[get_program_counter() + index + 1];
     return operand1 * 0x100 + operand2;
-}
-
-int16_t get_short_operand(uint16_t index) {
-    return (int16_t) get_ushort_operand(index);
 }
 
 void push_stack(word_t value) {
@@ -117,7 +114,7 @@ void run() {
 bool step(void) {
     switch (get_instruction()) {
         case OP_BIPUSH: {
-            int8_t arg = get_byte_operand(1);
+            word_t arg = get_byte_operand(1);
             push_stack(arg);
             machine.pc += 2;
             log("BIPUSH %d\n", arg);
@@ -131,14 +128,14 @@ bool step(void) {
             break;
         }
         case OP_GOTO: {
-            int16_t offset = get_short_operand(1);
+            int16_t offset = (int16_t)get_short_operand(1);
             machine.pc += offset;
             log("GOTO %d\n", offset);
             break;
         }
         case OP_IFEQ: {
             word_t arg = pop_stack();
-            int16_t offset = get_short_operand(1);
+            int16_t offset = (int16_t)get_short_operand(1);
             if (arg != 0) {
                 offset = 3;
             }
@@ -148,7 +145,7 @@ bool step(void) {
         }
         case OP_IFLT: {
             word_t arg = pop_stack();
-            int16_t offset = get_short_operand(1);
+            int16_t offset = (int16_t)get_short_operand(1);
             if (arg >= 0) {
                 offset = 3;
             }
@@ -159,7 +156,7 @@ bool step(void) {
         case OP_ICMPEQ: {
             word_t arg1 = pop_stack();
             word_t arg2 = pop_stack();
-            int16_t offset = get_short_operand(1);
+            word_t offset = get_short_operand(1);
             if (arg1 != arg2) {
                 offset = 3;
             }
@@ -200,7 +197,7 @@ bool step(void) {
             break;
         }
         case OP_LDC_W: {
-            uint16_t index = get_ushort_operand(1);
+            word_t index = get_short_operand(1);
             push_stack(get_constant(index));
             machine.pc += 3;
             log("LDC_W %d\n", index);
@@ -208,23 +205,27 @@ bool step(void) {
         }
         case OP_ISTORE: {
             word_t local = pop_stack();
-            byte_t index = get_byte_operand(1);
+            word_t index = machine.wide_index
+                           ? get_short_operand(1)
+                           : get_byte_operand(1);
             set_local_variable(index, local);
-            machine.pc += 2;
+            machine.pc += machine.wide_index ? 3 : 2;
             log("ISTORE %d\n", index);
             break;
         }
         case OP_ILOAD: {
-            int8_t index = get_byte_operand(1);
+            word_t index = machine.wide_index
+                           ? get_short_operand(1)
+                           : get_byte_operand(1);
             word_t local = get_local_variable(index);
             push_stack(local);
-            machine.pc += 2;
+            machine.pc += machine.wide_index ? 3 : 2;
             log("ILOAD %d\n", index);
             break;
         }
         case OP_IINC: {
-            int8_t index = get_byte_operand(1);
-            int8_t value = get_byte_operand(2);
+            word_t index = get_byte_operand(1);
+            word_t value = get_byte_operand(2);
             set_local_variable(index, get_local_variable(index) + value);
             machine.pc += 3;
             log("IINC %d %d\n", index, value);
@@ -265,21 +266,24 @@ bool step(void) {
             log("SWAP\n");
             break;
         }
-        case OP_WIDE:
-            //TODO:
+        case OP_WIDE: {
             machine.pc += 1;
-            log("WIDE\n");
+            log("WIDE ");
+            machine.wide_index = true;
+            step();
+            machine.wide_index = false;
             break;
+        }
         case OP_INVOKEVIRTUAL: {
             // Keep current registers
             uint32_t prev_pc = machine.pc;
             word_t *prev_lv = machine.lv;
             // Load method pointer and set PC
-            uint16_t method = get_ushort_operand(1);
+            word_t method = get_short_operand(1);
             machine.pc = get_constant(method);
             // Read number of arguments and locals
-            int16_t num_args = get_short_operand(0);
-            int16_t num_locals = get_short_operand(2);
+            word_t num_args = get_short_operand(0);
+            word_t num_locals = get_short_operand(2);
             // Set current frame base
             machine.lv = machine.sp - num_args + 1;
             // Make room for locals
