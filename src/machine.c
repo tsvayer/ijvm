@@ -4,107 +4,10 @@
 
 #define STACK_SIZE 0x10000
 
-static uint32_t swap_word(uint32_t num) {
-    return ((num >> 24) & 0xff) | ((num << 8) & 0xff0000) | ((num >> 8) & 0xff00) | ((num << 24) & 0xff000000);
-}
-
 machine_t machine;
 
-byte_t *parse_block(FILE *fp, uint32_t *block_size) {
-    uint32_t origin;
-    // Read and ignore the origin
-    fread(&origin, sizeof(uint32_t), 1, fp);
-    // Read block size
-    fread(block_size, sizeof(uint32_t), 1, fp);
-    // Convert endianness
-    *block_size = swap_word(*block_size);
-    // Allocate memory for block data
-    byte_t *data = malloc(sizeof(byte_t) * *block_size);
-    // Read block data
-    fread(data, sizeof(byte_t), *block_size, fp);
-    return data;
-}
-
-int init_ijvm(char *binary_file) {
-    // Open ijvm file for reading
-    FILE *fp = fopen(binary_file, "rb");
-    uint32_t header;
-    // Read header
-    fread(&header, sizeof(uint32_t), 1, fp);
-    // Convert endianness
-    header = swap_word(header);
-    // Check that it is actually the ijvm file
-    if (header != MAGIC_NUMBER) {
-        // If it is not ijvm file close file and return error
-        fclose(fp);
-        return -1;
-    }
-    machine.halted = false;
-    machine.wide_index = false;
-    // Reset program counter
-    machine.pc = 0;
-    // Init stack
-    machine.stack = malloc(sizeof(word_t) * STACK_SIZE);
-    machine.lv = machine.stack;
-    // Allow for 10 variables in the entry func
-    machine.sp = machine.lv + 10;
-    // Parse Constant Pool block
-    machine.cpp = parse_block(fp, &machine.cp_size);
-    // Parse Text block
-    machine.text = parse_block(fp, &machine.text_size);
-    // Initialize to standard I/O
-    machine.input = stdin;
-    machine.output = stdout;
-    // Close file and return success
-    fclose(fp);
-    return 0;
-}
-
-void destroy_ijvm() {
-    // Reset program counter
-    machine.pc = 0;
-    // Free Constant Pool block memory
-    free(machine.cpp);
-    // Reset Text block size
-    machine.text_size = 0;
-    // Free Text block memory
-    free(machine.text);
-    // Reset Constant Pool Size
-    machine.cp_size = 0;
-    // Destroy Stack
-    free(machine.stack);
-    machine.stack = NULL;
-    machine.sp = NULL;
-    machine.lv = NULL;
-}
-
-word_t get_local_variable(int i) {
-    return machine.lv[i];
-}
-
-void set_local_variable(int index, word_t value) {
-    machine.lv[index] = value;
-}
-
-int8_t get_byte_operand(uint16_t index) {
-    return (int8_t) get_text()[get_program_counter() + index];
-}
-
-uint16_t get_short_operand(uint16_t index) {
-    uint16_t operand1 = get_text()[get_program_counter() + index];
-    uint16_t operand2 = get_text()[get_program_counter() + index + 1];
-    return operand1 * 0x100 + operand2;
-}
-
-void push_stack(word_t value) {
-    machine.sp += 1;
-    *machine.sp = value;
-}
-
-word_t pop_stack(void) {
-    word_t value = *machine.sp;
-    machine.sp -= 1;
-    return value;
+static uint32_t swap_word(uint32_t num) {
+    return ((num >> 24) & 0xff) | ((num << 8) & 0xff0000) | ((num >> 8) & 0xff00) | ((num << 24) & 0xff000000);
 }
 
 void run() {
@@ -336,6 +239,111 @@ bool step(void) {
     return !finished();
 }
 
+byte_t *parse_block(FILE *fp, uint32_t *block_size) {
+    uint32_t origin;
+    // Read and ignore the origin
+    fread(&origin, sizeof(uint32_t), 1, fp);
+    // Read block size
+    fread(block_size, sizeof(uint32_t), 1, fp);
+    // Convert endianness
+    *block_size = swap_word(*block_size);
+    // Allocate memory for block data
+    byte_t *data = malloc(sizeof(byte_t) * *block_size);
+    // Read block data
+    fread(data, sizeof(byte_t), *block_size, fp);
+    return data;
+}
+
+int init_ijvm(char *binary_file) {
+    // Open ijvm file for reading
+    FILE *fp = fopen(binary_file, "rb");
+    uint32_t header;
+    // Read header
+    fread(&header, sizeof(uint32_t), 1, fp);
+    // Convert endianness
+    header = swap_word(header);
+    // Check that it is actually the ijvm file
+    if (header != MAGIC_NUMBER) {
+        // If it is not ijvm file close file and return error
+        fclose(fp);
+        return -1;
+    }
+    machine.halted = false;
+    machine.wide_index = false;
+    // Reset program counter
+    machine.pc = 0;
+    // Init stack
+    machine.stack = malloc(sizeof(word_t) * STACK_SIZE);
+    machine.lv = machine.stack;
+    // Allow for 10 variables in the entry func
+    machine.sp = machine.lv + 10;
+    // Parse Constant Pool block
+    machine.cpp = parse_block(fp, &machine.cp_size);
+    // Parse Text block
+    machine.text = parse_block(fp, &machine.text_size);
+    // Initialize to standard I/O
+    machine.input = stdin;
+    machine.output = stdout;
+    // Close file and return success
+    fclose(fp);
+    return 0;
+}
+
+void destroy_ijvm() {
+    // Reset program counter
+    machine.pc = 0;
+    // Free Constant Pool block memory
+    free(machine.cpp);
+    // Reset Text block size
+    machine.text_size = 0;
+    // Free Text block memory
+    free(machine.text);
+    // Reset Constant Pool Size
+    machine.cp_size = 0;
+    // Destroy Stack
+    free(machine.stack);
+    machine.stack = NULL;
+    machine.sp = NULL;
+    machine.lv = NULL;
+}
+
+word_t get_local_variable(int i) {
+    return machine.lv[i];
+}
+
+void set_local_variable(int index, word_t value) {
+    machine.lv[index] = value;
+}
+
+int8_t get_byte_operand(uint16_t index) {
+    return (int8_t) get_text()[get_program_counter() + index];
+}
+
+uint16_t get_short_operand(uint16_t index) {
+    uint16_t operand1 = get_text()[get_program_counter() + index];
+    uint16_t operand2 = get_text()[get_program_counter() + index + 1];
+    return operand1 * 0x100 + operand2;
+}
+
+word_t get_constant(int i) {
+    int offset = i * sizeof(word_t);
+    return machine.cpp[offset] * 0x1000000
+           + machine.cpp[offset + 1] * 0x10000
+           + machine.cpp[offset + 2] * 0x100
+           + machine.cpp[offset + 3];
+}
+
+void push_stack(word_t value) {
+    machine.sp += 1;
+    *machine.sp = value;
+}
+
+word_t pop_stack(void) {
+    word_t value = *machine.sp;
+    machine.sp -= 1;
+    return value;
+}
+
 void set_input(FILE *fp) {
     machine.input = fp;
 }
@@ -375,12 +383,4 @@ word_t *get_stack(void) {
 bool finished(void) {
     return machine.halted
            || get_program_counter() >= text_size();
-}
-
-word_t get_constant(int i) {
-    int offset = i * sizeof(word_t);
-    return machine.cpp[offset] * 0x1000000
-           + machine.cpp[offset + 1] * 0x10000
-           + machine.cpp[offset + 2] * 0x100
-           + machine.cpp[offset + 3];
 }
