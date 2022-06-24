@@ -201,7 +201,7 @@ bool step(void) {
         case OP_IN: {
             int input = getc(machine.input);
             if (input == EOF)
-                input = '0';
+                input = 0;
             push_stack(input);
             machine.pc += 1;
             log("IN\n");
