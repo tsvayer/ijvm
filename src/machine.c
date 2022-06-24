@@ -39,6 +39,7 @@ int init_ijvm(char *binary_file) {
         fclose(fp);
         return -1;
     }
+    machine.halted = false;
     // Reset program counter
     machine.pc = 0;
     // Init stack
@@ -198,15 +199,6 @@ bool step(void) {
             log("IOR\n");
             break;
         }
-        case OP_IN: {
-            int input = getc(machine.input);
-            if (input == EOF)
-                input = 0;
-            push_stack(input);
-            machine.pc += 1;
-            log("IN\n");
-            break;
-        }
         case OP_LDC_W: {
             uint16_t index = get_ushort_operand(1);
             push_stack(get_constant(index));
@@ -242,6 +234,15 @@ bool step(void) {
             machine.pc += 1;
             log("NOP\n");
             break;
+        case OP_IN: {
+            int input = getc(machine.input);
+            if (input == EOF)
+                input = 0;
+            push_stack(input);
+            machine.pc += 1;
+            log("IN\n");
+            break;
+        }
         case OP_OUT: {
             word_t arg = pop_stack();
             putc(arg, machine.output);
